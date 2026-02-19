@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nebula Chat</title>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Segoe UI", sans-serif;
+        }
+
+        body {
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: radial-gradient(circle at top, #0f172a, #020617);
+            overflow: hidden;
+        }
+
+        /* subtle particle glow */
+        body::before {
+            content: "";
+            position: absolute;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(0, 255, 255, 0.08) 1px, transparent 1px);
+            background-size: 80px 80px;
+            animation: move 40s linear infinite;
+        }
+
+        @keyframes move {
+            from {
+                transform: translate(0, 0);
+            }
+
+            to {
+                transform: translate(-200px, -200px);
+            }
+        }
+
+        .chat-app {
+            width: 420px;
+            height: 680px;
+            border-radius: 24px;
+            backdrop-filter: blur(20px);
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 0 40px rgba(0, 255, 255, 0.15);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* header */
+        .header {
+            padding: 16px;
+            text-align: center;
+            color: #e0f2fe;
+            font-weight: 600;
+            letter-spacing: 1px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* connection panel */
+        .connection-panel {
+            padding: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .my-id {
+            font-size: 12px;
+            color: #94a3b8;
+        }
+
+        .connection-panel input {
+            padding: 10px;
+            border-radius: 999px;
+            border: none;
+            outline: none;
+            background: rgba(255, 255, 255, 0.05);
+            color: white;
+        }
+
+        .connection-panel button {
+            padding: 10px;
+            border-radius: 999px;
+            border: none;
+            cursor: pointer;
+            background: linear-gradient(135deg, cyan, violet);
+            color: white;
+            font-weight: bold;
+        }
+
+        /* chat area */
+        .chat-box {
+            flex: 1;
+            padding: 16px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        /* bubbles */
+        .message {
+            padding: 10px 14px;
+            border-radius: 16px;
+            max-width: 70%;
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            animation: pop 0.3s ease;
+        }
+
+        @keyframes pop {
+            from {
+                transform: scale(0.8);
+                opacity: 0;
+            }
+
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .sent {
+            align-self: flex-end;
+            background: rgba(0, 255, 255, 0.15);
+            color: #a5f3fc;
+            box-shadow: 0 0 12px rgba(0, 255, 255, 0.4);
+        }
+
+        .received {
+            align-self: flex-start;
+            background: rgba(139, 92, 246, 0.15);
+            color: #ddd6fe;
+            box-shadow: 0 0 12px rgba(139, 92, 246, 0.4);
+        }
+
+        /* system text */
+        .system {
+            text-align: center;
+            font-size: 12px;
+            color: #94a3b8;
+        }
+
+        /* input bar */
+        .input-area {
+            display: flex;
+            padding: 12px;
+            gap: 10px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .input-area input {
+            flex: 1;
+            padding: 12px;
+            border-radius: 999px;
+            border: none;
+            outline: none;
+            background: rgba(255, 255, 255, 0.05);
+            color: white;
+        }
+
+        .input-area button {
+            padding: 12px 18px;
+            border-radius: 999px;
+            border: none;
+            cursor: pointer;
+            background: linear-gradient(135deg, cyan, violet);
+            color: white;
+            font-weight: bold;
+            transition: 0.2s;
+        }
+
+        .input-area button:hover {
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="chat-app">
+
+        <div class="header">Nebula Chat</div>
+
+        <!-- connection panel -->
+        <div class="connection-panel">
+            <div class="my-id">
+                My Address: <span id="my-addr">Loading...</span>
+            </div>
+
+            <input id="target-peer" placeholder="Paste friend's multiaddress here">
+            <button onclick="connectToPeer()">Connect</button>
+        </div>
+
+        <div class="chat-box" id="chat-box"></div>
+
+        <div class="input-area">
+            <input id="msg-input" placeholder="Type into the nebula..." onkeypress="handleEnter(event)">
+            <button onclick="sendMessage()">Send</button>
+        </div>
+
+    </div>
+
+    <script>
+        const ws = new WebSocket("ws://" + window.location.host + "/ws");
+
+        // handle incoming messages
+        ws.onmessage = function (event) {
+            const data = JSON.parse(event.data);
+
+            if (data.type === "my-addr") {
+                document.getElementById("my-addr").innerText = data.payload;
+            } else if (data.type === "msg") {
+                addMessage(data.payload, "received");
+            } else if (data.type === "system") {
+                addSystem(data.payload);
+            } else if (data.type === "error") {
+                const sentMsgs = document.getElementsByClassName("sent");
+                if (sentMsgs.length > 0) {
+                    const last = sentMsgs[sentMsgs.length - 1];
+                    last.classList.add("error");
+                }
+                addSystem("Error: " + data.payload);
+            }
+        };
+
+        // send chat message
+        function sendMessage() {
+            const input = document.getElementById("msg-input");
+            if (!input.value.trim()) return;
+
+            addMessage(input.value, "sent");
+            ws.send(JSON.stringify({ type: "send", payload: input.value }));
+            input.value = "";
+        }
+
+        // connect to friend
+        function connectToPeer() {
+            const addr = document.getElementById("target-peer").value;
+            if (!addr.trim()) return;
+            ws.send(JSON.stringify({ type: "connect", payload: addr }));
+        }
+
+        // add message bubble
+        function addMessage(text, type) {
+            const div = document.createElement("div");
+            div.className = "message " + type;
+            div.innerText = text;
+
+            const box = document.getElementById("chat-box");
+            box.appendChild(div);
+            box.scrollTop = box.scrollHeight;
+        }
+
+        // system messages
+        function addSystem(text) {
+            const div = document.createElement("div");
+            div.className = "system";
+            div.innerText = text;
+
+            const box = document.getElementById("chat-box");
+            box.appendChild(div);
+            box.scrollTop = box.scrollHeight;
+        }
+
+        // enter key
+        function handleEnter(e) {
+            if (e.key === "Enter") sendMessage();
+        }
+    </script>
+
+</body>
+
+</html>
