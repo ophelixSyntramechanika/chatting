@@ -21,12 +21,12 @@
             flex-direction: column;
             align-items: center;
             padding: 20px;
+            gap: 12px;
         }
 
         h1 {
             font-size: 1.6rem;
             color: #7c6aff;
-            margin-bottom: 16px;
             letter-spacing: 2px;
         }
 
@@ -37,16 +37,15 @@
             padding: 16px;
             width: 100%;
             max-width: 640px;
-            margin-bottom: 12px;
         }
 
         .card label {
-            font-size: 0.75rem;
+            font-size: 0.72rem;
             color: #888;
             text-transform: uppercase;
             letter-spacing: 1px;
             display: block;
-            margin-bottom: 6px;
+            margin-bottom: 8px;
         }
 
         #myAddr {
@@ -60,23 +59,24 @@
             cursor: pointer;
             border: 1px solid #2a2a4a;
             transition: border-color 0.2s;
+            user-select: all;
         }
 
         #myAddr:hover {
             border-color: #7c6aff;
         }
 
-        .copy-hint {
+        .hint {
             font-size: 0.7rem;
             color: #555;
-            margin-top: 4px;
+            margin-top: 5px;
         }
 
-        .status-bar {
+        .status-row {
             display: flex;
             align-items: center;
             gap: 8px;
-            margin-bottom: 8px;
+            margin-bottom: 10px;
         }
 
         .dot {
@@ -84,10 +84,11 @@
             height: 10px;
             border-radius: 50%;
             background: #ff4444;
+            flex-shrink: 0;
             transition: background 0.3s;
         }
 
-        .dot.connected {
+        .dot.on {
             background: #44ff88;
         }
 
@@ -96,7 +97,7 @@
             color: #aaa;
         }
 
-        .connect-row {
+        .row {
             display: flex;
             gap: 8px;
         }
@@ -122,20 +123,15 @@
             color: white;
             border: none;
             border-radius: 8px;
-            padding: 10px 18px;
+            padding: 10px 20px;
             font-size: 0.9rem;
             cursor: pointer;
-            transition: background 0.2s;
             white-space: nowrap;
+            transition: background 0.2s;
         }
 
         button:hover {
             background: #6a58e0;
-        }
-
-        button:disabled {
-            background: #444;
-            cursor: not-allowed;
         }
 
         #chatBox {
@@ -146,14 +142,13 @@
             border: 1px solid #2a2a4a;
             border-radius: 12px;
             overflow-y: auto;
-            padding: 16px;
-            margin-bottom: 12px;
-            min-height: 200px;
+            padding: 14px;
+            min-height: 180px;
         }
 
         .msg {
-            padding: 6px 0;
-            font-size: 0.9rem;
+            padding: 5px 0;
+            font-size: 0.88rem;
             border-bottom: 1px solid #1f1f3a;
         }
 
@@ -170,7 +165,7 @@
             color: #44ff88;
         }
 
-        .msg.friend {
+        .msg.msg {
             color: #e0e0ff;
         }
 
@@ -185,7 +180,6 @@
             font-size: 0.7rem;
             color: #555;
             text-align: center;
-            margin-top: 8px;
         }
     </style>
 </head>
@@ -197,105 +191,91 @@
     <div class="card">
         <label>Your Address (click to copy)</label>
         <div id="myAddr">Waiting for backend...</div>
-        <div class="copy-hint">Click the address to copy it, then send it to your friend</div>
+        <div class="hint">Click to copy, then send to your friend</div>
     </div>
 
     <div class="card">
         <label>Connect to Friend</label>
-        <div class="status-bar">
+        <div class="status-row">
             <div class="dot" id="dot"></div>
             <span id="statusText">Not connected</span>
         </div>
-        <div class="connect-row">
+        <div class="row">
             <input type="text" id="targetAddr" placeholder="Paste friend's /ip4/... address here" />
-            <button id="connectBtn" onclick="connectToPeer()">Connect</button>
+            <button onclick="connectToPeer()">Connect</button>
         </div>
     </div>
 
     <div id="chatBox"></div>
 
     <div class="send-row">
-        <input type="text" id="msgInput" placeholder="Type a message..."
+        <input type="text" id="msgInput" placeholder="Type a message and press Enter..."
             onkeydown="if(event.key==='Enter') sendMsg()" />
         <button onclick="sendMsg()">Send</button>
     </div>
 
-    <div id="wsStatus">🔴 Connecting to backend (ws://127.0.0.1:8081/ws)...</div>
+    <div id="wsStatus">Connecting to backend...</div>
 
     <script>
-        // ============================================================
-        // IMPORTANT: Change 8081 to match your -web port if different
-        // ============================================================
-        const WS_URL = "ws://127.0.0.1:8081/ws";
+        // Automatically uses the same host and port as the page —
+        // so localhost:8081 → ws://localhost:8081/ws
+        //    localhost:8082 → ws://localhost:8082/ws
+        const WS_URL = "ws://" + window.location.host + "/ws";
 
         let ws = null;
-        let connected = false;
 
         function connect() {
+            document.getElementById("wsStatus").textContent = "🔄 Connecting to " + WS_URL + "...";
             ws = new WebSocket(WS_URL);
 
             ws.onopen = () => {
-                document.getElementById("wsStatus").textContent = "🟢 Backend connected";
+                document.getElementById("wsStatus").textContent = "🟢 Backend connected (" + WS_URL + ")";
             };
 
             ws.onclose = () => {
-                document.getElementById("wsStatus").textContent = "🔴 Backend disconnected — is Go running?";
-                // Try to reconnect every 3 seconds
+                document.getElementById("wsStatus").textContent = "🔴 Backend disconnected — retrying...";
                 setTimeout(connect, 3000);
             };
 
             ws.onerror = () => {
-                document.getElementById("wsStatus").textContent = "🔴 Cannot reach backend. Check: (1) Go is running, (2) You allowed insecure content";
+                document.getElementById("wsStatus").textContent = "🔴 Cannot reach backend at " + WS_URL;
             };
 
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
 
-                switch (data.type) {
-                    case "my-addr":
-                        const addrEl = document.getElementById("myAddr");
-                        addrEl.textContent = data.payload;
-                        addrEl.onclick = () => {
-                            navigator.clipboard.writeText(data.payload).then(() => {
-                                addrEl.style.borderColor = "#44ff88";
-                                setTimeout(() => addrEl.style.borderColor = "", 1000);
-                            });
-                        };
-                        break;
-
-                    case "system":
-                        addMessage("system", data.payload);
-                        if (data.payload.includes("✅") && data.payload.includes("chat")) {
-                            setConnected(true);
-                        }
-                        if (data.payload.includes("disconnected")) {
-                            setConnected(false);
-                        }
-                        break;
-
-                    case "error":
-                        addMessage("error", data.payload);
-                        break;
-
-                    case "msg":
-                        addMessage("friend", data.payload);
-                        break;
-
-                    case "me":
-                        addMessage("me", data.payload);
-                        break;
+                if (data.type === "my-addr") {
+                    const el = document.getElementById("myAddr");
+                    el.textContent = data.payload;
+                    el.onclick = () => {
+                        navigator.clipboard.writeText(data.payload).then(() => {
+                            el.style.borderColor = "#44ff88";
+                            el.title = "Copied!";
+                            setTimeout(() => { el.style.borderColor = ""; el.title = ""; }, 1500);
+                        });
+                    };
+                    return;
                 }
+
+                if (data.type === "system") {
+                    addMsg("system", data.payload);
+                    if (data.payload.includes("✅") && data.payload.includes("chat")) setConnected(true);
+                    if (data.payload.includes("disconnected")) setConnected(false);
+                    return;
+                }
+
+                if (data.type === "error") { addMsg("error", data.payload); return; }
+                if (data.type === "me") { addMsg("me", data.payload); return; }
+                if (data.type === "msg") { addMsg("msg", "Friend: " + data.payload); return; }
             };
         }
 
         function setConnected(val) {
-            connected = val;
-            document.getElementById("dot").className = "dot" + (val ? " connected" : "");
-            document.getElementById("statusText").textContent = val ? "Connected ✅" : "Not connected";
-            document.getElementById("connectBtn").disabled = val;
+            document.getElementById("dot").className = "dot" + (val ? " on" : "");
+            document.getElementById("statusText").textContent = val ? "✅ Connected" : "Not connected";
         }
 
-        function addMessage(type, text) {
+        function addMsg(type, text) {
             const box = document.getElementById("chatBox");
             const div = document.createElement("div");
             div.className = "msg " + type;
@@ -305,46 +285,25 @@
         }
 
         function connectToPeer() {
-            // Get value and trim whitespace — this fixes the #1 cause of format errors
-            const raw = document.getElementById("targetAddr").value;
-            const addr = raw.trim();
+            const addr = document.getElementById("targetAddr").value.trim();
+            console.log("Sending connect with addr:", JSON.stringify(addr));
 
-            console.log("Connecting to:", JSON.stringify(addr)); // visible in browser F12 console
-
-            if (!addr) {
-                addMessage("error", "❌ Please paste your friend's address first");
-                return;
-            }
-
-            if (!addr.startsWith("/")) {
-                addMessage("error", "❌ Address must start with /ip4/ or /ip6/ — did you copy the full thing?");
-                return;
-            }
-
-            if (!ws || ws.readyState !== WebSocket.OPEN) {
-                addMessage("error", "❌ Backend not connected. Is your Go app running?");
-                return;
-            }
+            if (!addr) { addMsg("error", "❌ Paste your friend's address first"); return; }
+            if (!addr.startsWith("/")) { addMsg("error", "❌ Must start with /ip4/ — did you copy the full address?"); return; }
+            if (!ws || ws.readyState !== WebSocket.OPEN) { addMsg("error", "❌ Backend not connected"); return; }
 
             ws.send(JSON.stringify({ type: "connect", payload: addr }));
-            addMessage("system", "Sending connect request...");
         }
 
         function sendMsg() {
             const input = document.getElementById("msgInput");
             const msg = input.value.trim();
             if (!msg) return;
-
-            if (!ws || ws.readyState !== WebSocket.OPEN) {
-                addMessage("error", "❌ Backend not connected");
-                return;
-            }
-
+            if (!ws || ws.readyState !== WebSocket.OPEN) { addMsg("error", "❌ Backend not connected"); return; }
             ws.send(JSON.stringify({ type: "send", payload: msg }));
             input.value = "";
         }
 
-        // Start connecting
         connect();
     </script>
 </body>
