@@ -4,8 +4,24 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>P2P Chat</title>
+    <title>SIGNAL — Chat</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap"
+        rel="stylesheet" />
     <style>
+        :root {
+            --bg: #080810;
+            --surface: #0e0e1c;
+            --border: #1e1e3a;
+            --accent: #00f5a0;
+            --accent2: #00c8ff;
+            --danger: #ff4d6d;
+            --text: #e8e8f0;
+            --muted: #555570;
+            --me-bg: #0a2a1f;
+            --them-bg: #0a0a22;
+        }
+
         * {
             box-sizing: border-box;
             margin: 0;
@@ -13,298 +29,523 @@
         }
 
         body {
-            font-family: 'Segoe UI', sans-serif;
-            background: #0f0f1a;
-            color: #e0e0ff;
-            height: 100vh;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Syne', sans-serif;
+            height: 100dvh;
             display: flex;
             flex-direction: column;
+            overflow: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(var(--border) 1px, transparent 1px),
+                linear-gradient(90deg, var(--border) 1px, transparent 1px);
+            background-size: 40px 40px;
+            opacity: 0.3;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ── SETUP SCREEN ── */
+        #setupScreen {
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            display: flex;
             align-items: center;
+            justify-content: center;
+            background: var(--bg);
             padding: 20px;
-            gap: 12px;
         }
 
-        h1 {
-            font-size: 1.6rem;
-            color: #7c6aff;
-            letter-spacing: 2px;
-        }
-
-        .card {
-            background: #1a1a2e;
-            border: 1px solid #2a2a4a;
-            border-radius: 12px;
-            padding: 16px;
+        .setup-box {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 40px;
             width: 100%;
-            max-width: 640px;
+            max-width: 420px;
+            position: relative;
+            z-index: 1;
         }
 
-        .card label {
-            font-size: 0.72rem;
-            color: #888;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            display: block;
-            margin-bottom: 8px;
+        .setup-box h1 {
+            font-size: 2.2rem;
+            font-weight: 800;
+            letter-spacing: -1px;
+            margin-bottom: 4px;
         }
 
-        #myAddr {
-            font-family: monospace;
+        .setup-box h1 span {
+            color: var(--accent);
+        }
+
+        .setup-box p {
+            color: var(--muted);
             font-size: 0.8rem;
-            color: #7c6aff;
-            word-break: break-all;
-            background: #12122a;
-            padding: 10px;
-            border-radius: 8px;
-            cursor: pointer;
-            border: 1px solid #2a2a4a;
-            transition: border-color 0.2s;
-            user-select: all;
+            margin-bottom: 30px;
+            font-family: 'Space Mono', monospace;
         }
 
-        #myAddr:hover {
-            border-color: #7c6aff;
+        .field {
+            margin-bottom: 16px;
         }
 
-        .hint {
-            font-size: 0.7rem;
-            color: #555;
-            margin-top: 5px;
+        .field label {
+            display: block;
+            font-size: 0.68rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 6px;
         }
 
-        .status-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 10px;
-        }
-
-        .dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: #ff4444;
-            flex-shrink: 0;
-            transition: background 0.3s;
-        }
-
-        .dot.on {
-            background: #44ff88;
-        }
-
-        #statusText {
-            font-size: 0.85rem;
-            color: #aaa;
-        }
-
-        .row {
-            display: flex;
-            gap: 8px;
-        }
-
-        input[type="text"] {
-            flex: 1;
-            background: #12122a;
-            border: 1px solid #2a2a4a;
-            border-radius: 8px;
-            color: #e0e0ff;
-            padding: 10px 14px;
-            font-size: 0.9rem;
+        .field input {
+            width: 100%;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text);
+            padding: 13px 16px;
+            font-size: 0.95rem;
+            font-family: 'Syne', sans-serif;
             outline: none;
             transition: border-color 0.2s;
         }
 
-        input[type="text"]:focus {
-            border-color: #7c6aff;
+        .field input:focus {
+            border-color: var(--accent);
         }
 
-        button {
-            background: #7c6aff;
-            color: white;
+        .btn-primary {
+            width: 100%;
+            background: var(--accent);
+            color: #000;
             border: none;
-            border-radius: 8px;
-            padding: 10px 20px;
-            font-size: 0.9rem;
+            border-radius: 10px;
+            padding: 15px;
+            font-size: 1rem;
+            font-weight: 800;
+            font-family: 'Syne', sans-serif;
             cursor: pointer;
-            white-space: nowrap;
-            transition: background 0.2s;
+            letter-spacing: 2px;
+            transition: opacity 0.2s, transform 0.1s;
+            margin-top: 6px;
         }
 
-        button:hover {
-            background: #6a58e0;
+        .btn-primary:hover {
+            opacity: 0.85;
         }
 
-        #chatBox {
-            width: 100%;
-            max-width: 640px;
-            flex: 1;
-            background: #1a1a2e;
-            border: 1px solid #2a2a4a;
-            border-radius: 12px;
-            overflow-y: auto;
-            padding: 14px;
-            min-height: 180px;
+        .btn-primary:active {
+            transform: scale(0.98);
         }
 
-        .msg {
-            padding: 5px 0;
-            font-size: 0.88rem;
-            border-bottom: 1px solid #1f1f3a;
-        }
-
-        .msg.system {
-            color: #7c6aff;
-            font-style: italic;
-        }
-
-        .msg.error {
-            color: #ff6b6b;
-        }
-
-        .msg.me {
-            color: #44ff88;
-        }
-
-        .msg.msg {
-            color: #e0e0ff;
-        }
-
-        .send-row {
-            display: flex;
-            gap: 8px;
-            width: 100%;
-            max-width: 640px;
-        }
-
-        #wsStatus {
-            font-size: 0.7rem;
-            color: #555;
+        #setupError {
+            color: var(--danger);
+            font-size: 0.78rem;
+            margin-top: 12px;
+            font-family: 'Space Mono', monospace;
+            display: none;
             text-align: center;
+        }
+
+        /* ── CHAT SCREEN ── */
+        #chatScreen {
+            display: none;
+            flex-direction: column;
+            height: 100dvh;
+            position: relative;
+            z-index: 1;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 20px;
+            border-bottom: 1px solid var(--border);
+            background: rgba(8, 8, 16, 0.92);
+            backdrop-filter: blur(12px);
+            flex-shrink: 0;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo {
+            font-size: 1.1rem;
+            font-weight: 800;
+            letter-spacing: 4px;
+            color: var(--accent);
+        }
+
+        .room-tag {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.68rem;
+            color: var(--muted);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 3px 10px;
+            border-radius: 20px;
+        }
+
+        .online-pill {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.72rem;
+            color: var(--muted);
+            font-family: 'Space Mono', monospace;
+        }
+
+        .pulse {
+            width: 8px;
+            height: 8px;
+            background: var(--accent);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.3;
+                transform: scale(0.7);
+            }
+        }
+
+        .btn-leave {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--muted);
+            border-radius: 8px;
+            padding: 6px 14px;
+            font-size: 0.72rem;
+            font-family: 'Space Mono', monospace;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-leave:hover {
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+
+        #messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            scroll-behavior: smooth;
+        }
+
+        #messages::-webkit-scrollbar {
+            width: 3px;
+        }
+
+        #messages::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px;
+        }
+
+        .msg-wrap {
+            display: flex;
+            flex-direction: column;
+            animation: fadeUp 0.18s ease;
+        }
+
+        @keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(6px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .msg-wrap.me {
+            align-items: flex-end;
+        }
+
+        .msg-wrap.them {
+            align-items: flex-start;
+        }
+
+        .msg-wrap.system {
+            align-items: center;
+        }
+
+        .msg-meta {
+            font-size: 0.62rem;
+            color: var(--muted);
+            font-family: 'Space Mono', monospace;
+            margin-bottom: 3px;
+            padding: 0 4px;
+        }
+
+        .bubble {
+            max-width: 70%;
+            padding: 10px 14px;
+            border-radius: 14px;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            word-break: break-word;
+        }
+
+        .msg-wrap.me .bubble {
+            background: var(--me-bg);
+            border: 1px solid #1a4a30;
+            border-bottom-right-radius: 4px;
+            color: var(--accent);
+        }
+
+        .msg-wrap.them .bubble {
+            background: var(--them-bg);
+            border: 1px solid var(--border);
+            border-bottom-left-radius: 4px;
+            color: var(--text);
+        }
+
+        .msg-wrap.system .bubble {
+            background: transparent;
+            border: none;
+            color: var(--muted);
+            font-size: 0.7rem;
+            font-family: 'Space Mono', monospace;
+            font-style: italic;
+            padding: 4px;
+        }
+
+        .input-bar {
+            display: flex;
+            gap: 10px;
+            padding: 14px 20px;
+            border-top: 1px solid var(--border);
+            background: rgba(8, 8, 16, 0.92);
+            backdrop-filter: blur(12px);
+            flex-shrink: 0;
+        }
+
+        #msgInput {
+            flex: 1;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text);
+            padding: 12px 16px;
+            font-size: 0.9rem;
+            font-family: 'Syne', sans-serif;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        #msgInput:focus {
+            border-color: var(--accent);
+        }
+
+        .btn-send {
+            background: var(--accent);
+            color: #000;
+            border: none;
+            border-radius: 10px;
+            padding: 12px 22px;
+            font-size: 0.9rem;
+            font-weight: 800;
+            font-family: 'Syne', sans-serif;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            letter-spacing: 1px;
+        }
+
+        .btn-send:hover {
+            opacity: 0.8;
         }
     </style>
 </head>
 
 <body>
 
-    <h1>⚡ P2P CHAT</h1>
+    <!-- ══ SETUP SCREEN ══ -->
+    <div id="setupScreen">
+        <div class="setup-box">
+            <h1>SIGNAL<span>.</span></h1>
+            <p>// instant encrypted chat</p>
 
-    <div class="card">
-        <label>Your Address (click to copy)</label>
-        <div id="myAddr">Waiting for backend...</div>
-        <div class="hint">Click to copy, then send to your friend</div>
-    </div>
+            <div class="field">
+                <label>Room Name</label>
+                <input type="text" id="roomInput" placeholder="e.g. secret-room-42" value="general" />
+            </div>
 
-    <div class="card">
-        <label>Connect to Friend</label>
-        <div class="status-row">
-            <div class="dot" id="dot"></div>
-            <span id="statusText">Not connected</span>
+            <div class="field">
+                <label>Your Username</label>
+                <input type="text" id="nameInput" placeholder="e.g. ghost" maxlength="20" />
+            </div>
+
+            <button class="btn-primary" onclick="startChat()">ENTER ROOM →</button>
+            <div id="setupError"></div>
         </div>
-        <div class="row">
-            <input type="text" id="targetAddr" placeholder="Paste friend's /ip4/... address here" />
-            <button onclick="connectToPeer()">Connect</button>
+    </div>
+
+    <!-- ══ CHAT SCREEN ══ -->
+    <div id="chatScreen">
+        <header>
+            <div class="header-left">
+                <div class="logo">SIGNAL</div>
+                <div class="room-tag" id="roomTag">#general</div>
+            </div>
+            <div class="online-pill">
+                <div class="pulse"></div>
+                <span id="onlineCount">connecting...</span>
+            </div>
+            <button class="btn-leave" onclick="leaveChat()">✕ leave</button>
+        </header>
+
+        <div id="messages"></div>
+
+        <div class="input-bar">
+            <input type="text" id="msgInput" placeholder="type a message and hit enter..."
+                onkeydown="if(event.key==='Enter') { sendMsg(); event.preventDefault(); }" />
+            <button class="btn-send" onclick="sendMsg()">SEND</button>
         </div>
     </div>
 
-    <div id="chatBox"></div>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+        import { getDatabase, ref, push, onChildAdded, onValue, set, onDisconnect }
+            from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-    <div class="send-row">
-        <input type="text" id="msgInput" placeholder="Type a message and press Enter..."
-            onkeydown="if(event.key==='Enter') sendMsg()" />
-        <button onclick="sendMsg()">Send</button>
-    </div>
+        // ── YOUR FIREBASE CONFIG IS PRE-FILLED ──
+        const firebaseConfig = {
+            apiKey: "AIzaSyDhdlUOQ4QswwmmBRW3qmuE4zdXBjZwb6M",
+            authDomain: "peertopeer-8c05f.firebaseapp.com",
+            databaseURL: "https://peertopeer-8c05f-default-rtdb.firebaseio.com",
+            projectId: "peertopeer-8c05f",
+            storageBucket: "peertopeer-8c05f.firebasestorage.app",
+            messagingSenderId: "499073961493",
+            appId: "1:499073961493:web:821f3f85d50c381287481c"
+        };
 
-    <div id="wsStatus">Connecting to backend...</div>
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
 
-    <script>
-        // Automatically uses the same host and port as the page —
-        // so localhost:8081 → ws://localhost:8081/ws
-        //    localhost:8082 → ws://localhost:8082/ws
-        const WS_URL = "ws://" + window.location.host + "/ws";
+        let myName = "";
+        let myRoom = "";
+        let messagesRef, presenceRef;
 
-        let ws = null;
+        window.startChat = function () {
+            myName = document.getElementById("nameInput").value.trim();
+            myRoom = document.getElementById("roomInput").value.trim()
+                .toLowerCase().replace(/\s+/g, "-") || "general";
 
-        function connect() {
-            document.getElementById("wsStatus").textContent = "🔄 Connecting to " + WS_URL + "...";
-            ws = new WebSocket(WS_URL);
+            if (!myName) { showErr("Please enter a username"); return; }
 
-            ws.onopen = () => {
-                document.getElementById("wsStatus").textContent = "🟢 Backend connected (" + WS_URL + ")";
-            };
+            messagesRef = ref(db, `rooms/${myRoom}/messages`);
+            presenceRef = ref(db, `rooms/${myRoom}/presence/${myName}`);
 
-            ws.onclose = () => {
-                document.getElementById("wsStatus").textContent = "🔴 Backend disconnected — retrying...";
-                setTimeout(connect, 3000);
-            };
+            // Mark yourself online, auto-remove on disconnect
+            set(presenceRef, { name: myName, online: true });
+            onDisconnect(presenceRef).remove();
 
-            ws.onerror = () => {
-                document.getElementById("wsStatus").textContent = "🔴 Cannot reach backend at " + WS_URL;
-            };
+            // Count who's online
+            onValue(ref(db, `rooms/${myRoom}/presence`), snap => {
+                const count = snap.exists() ? Object.keys(snap.val()).length : 0;
+                document.getElementById("onlineCount").textContent =
+                    count + (count === 1 ? " online" : " online");
+            });
 
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
+            // Listen for messages
+            onChildAdded(messagesRef, snap => {
+                const m = snap.val();
+                if (m) renderBubble(m.name, m.text, m.name === myName ? "me" : "them", m.time);
+            });
 
-                if (data.type === "my-addr") {
-                    const el = document.getElementById("myAddr");
-                    el.textContent = data.payload;
-                    el.onclick = () => {
-                        navigator.clipboard.writeText(data.payload).then(() => {
-                            el.style.borderColor = "#44ff88";
-                            el.title = "Copied!";
-                            setTimeout(() => { el.style.borderColor = ""; el.title = ""; }, 1500);
-                        });
-                    };
-                    return;
-                }
+            // Show chat screen
+            document.getElementById("setupScreen").style.display = "none";
+            document.getElementById("chatScreen").style.display = "flex";
+            document.getElementById("roomTag").textContent = "#" + myRoom;
+            document.getElementById("msgInput").focus();
+            addSystem(`you joined #${myRoom} as ${myName}`);
+        };
 
-                if (data.type === "system") {
-                    addMsg("system", data.payload);
-                    if (data.payload.includes("✅") && data.payload.includes("chat")) setConnected(true);
-                    if (data.payload.includes("disconnected")) setConnected(false);
-                    return;
-                }
+        window.sendMsg = function () {
+            const input = document.getElementById("msgInput");
+            const text = input.value.trim();
+            if (!text) return;
 
-                if (data.type === "error") { addMsg("error", data.payload); return; }
-                if (data.type === "me") { addMsg("me", data.payload); return; }
-                if (data.type === "msg") { addMsg("msg", "Friend: " + data.payload); return; }
-            };
-        }
+            push(messagesRef, {
+                name: myName,
+                text: text,
+                time: Date.now()
+            });
 
-        function setConnected(val) {
-            document.getElementById("dot").className = "dot" + (val ? " on" : "");
-            document.getElementById("statusText").textContent = val ? "✅ Connected" : "Not connected";
-        }
+            input.value = "";
+        };
 
-        function addMsg(type, text) {
-            const box = document.getElementById("chatBox");
-            const div = document.createElement("div");
-            div.className = "msg " + type;
-            div.textContent = text;
-            box.appendChild(div);
+        window.leaveChat = function () {
+            if (presenceRef) set(presenceRef, null);
+            location.reload();
+        };
+
+        function renderBubble(name, text, type, timestamp) {
+            const box = document.getElementById("messages");
+            const wrap = document.createElement("div");
+            wrap.className = "msg-wrap " + type;
+
+            const time = timestamp
+                ? new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                : "";
+
+            const meta = document.createElement("div");
+            meta.className = "msg-meta";
+            meta.textContent = (type === "me" ? "you" : name) + (time ? " · " + time : "");
+
+            const bubble = document.createElement("div");
+            bubble.className = "bubble";
+            bubble.textContent = text;
+
+            wrap.appendChild(meta);
+            wrap.appendChild(bubble);
+            box.appendChild(wrap);
             box.scrollTop = box.scrollHeight;
         }
 
-        function connectToPeer() {
-            const addr = document.getElementById("targetAddr").value.trim();
-            console.log("Sending connect with addr:", JSON.stringify(addr));
-
-            if (!addr) { addMsg("error", "❌ Paste your friend's address first"); return; }
-            if (!addr.startsWith("/")) { addMsg("error", "❌ Must start with /ip4/ — did you copy the full address?"); return; }
-            if (!ws || ws.readyState !== WebSocket.OPEN) { addMsg("error", "❌ Backend not connected"); return; }
-
-            ws.send(JSON.stringify({ type: "connect", payload: addr }));
+        function addSystem(text) {
+            const box = document.getElementById("messages");
+            const wrap = document.createElement("div");
+            wrap.className = "msg-wrap system";
+            const bubble = document.createElement("div");
+            bubble.className = "bubble";
+            bubble.textContent = "— " + text + " —";
+            wrap.appendChild(bubble);
+            box.appendChild(wrap);
+            box.scrollTop = box.scrollHeight;
         }
 
-        function sendMsg() {
-            const input = document.getElementById("msgInput");
-            const msg = input.value.trim();
-            if (!msg) return;
-            if (!ws || ws.readyState !== WebSocket.OPEN) { addMsg("error", "❌ Backend not connected"); return; }
-            ws.send(JSON.stringify({ type: "send", payload: msg }));
-            input.value = "";
+        function showErr(msg) {
+            const el = document.getElementById("setupError");
+            el.textContent = "⚠ " + msg;
+            el.style.display = "block";
         }
-
-        connect();
     </script>
 </body>
 
