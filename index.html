@@ -173,12 +173,14 @@
             background: rgba(8, 8, 16, 0.92);
             backdrop-filter: blur(12px);
             flex-shrink: 0;
+            gap: 8px;
+            flex-wrap: wrap;
         }
 
         .header-left {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
         }
 
         .logo {
@@ -196,6 +198,12 @@
             border: 1px solid var(--border);
             padding: 3px 10px;
             border-radius: 20px;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .online-pill {
@@ -229,21 +237,41 @@
             }
         }
 
-        .btn-leave {
+        .btn-icon {
             background: transparent;
             border: 1px solid var(--border);
             color: var(--muted);
             border-radius: 8px;
-            padding: 6px 14px;
+            padding: 6px 12px;
             font-size: 0.72rem;
             font-family: 'Space Mono', monospace;
             cursor: pointer;
             transition: all 0.2s;
+            white-space: nowrap;
         }
 
-        .btn-leave:hover {
+        .btn-icon:hover {
             border-color: var(--danger);
             color: var(--danger);
+        }
+
+        /* Storage info bar */
+        #storageBar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            padding: 6px 20px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            font-family: 'Space Mono', monospace;
+            font-size: 0.65rem;
+            color: var(--muted);
+            flex-shrink: 0;
+        }
+
+        #storageBar span {
+            color: var(--accent2);
         }
 
         #messages {
@@ -413,12 +441,22 @@
                 <div class="logo">SIGNAL</div>
                 <div class="room-tag" id="roomTag">#general</div>
             </div>
-            <div class="online-pill">
-                <div class="pulse"></div>
-                <span id="onlineCount">connecting...</span>
+            <div class="header-right">
+                <div class="online-pill">
+                    <div class="pulse"></div>
+                    <span id="onlineCount">...</span>
+                </div>
+                <button class="btn-icon" onclick="clearChat()">🗑 clear</button>
+                <button class="btn-icon" onclick="leaveChat()">✕ leave</button>
             </div>
-            <button class="btn-leave" onclick="leaveChat()">✕ leave</button>
         </header>
+
+        <!-- Storage info bar -->
+        <div id="storageBar">
+            💾 messages: <span id="msgCount">0</span> / 100 &nbsp;|&nbsp;
+            🕐 auto-delete after: <span>24 hours</span> &nbsp;|&nbsp;
+            📦 keeping storage clean automatically
+        </div>
 
         <div id="messages"></div>
 
@@ -431,10 +469,13 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-        import { getDatabase, ref, push, onChildAdded, onValue, set, onDisconnect }
-            from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+        import {
+            getDatabase, ref, push, onChildAdded, onValue,
+            set, remove, get, query, orderByChild,
+            limitToFirst, serverTimestamp
+        } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-        // ── YOUR FIREBASE CONFIG IS PRE-FILLED ──
+        // ── FIREBASE CONFIG ──
         const firebaseConfig = {
             apiKey: "AIzaSyDhdlUOQ4QswwmmBRW3qmuE4zdXBjZwb6M",
             authDomain: "peertopeer-8c05f.firebaseapp.com",
@@ -445,6 +486,9 @@
             appId: "1:499073961493:web:821f3f85d50c381287481c"
         };
 
+        const MAX_MESSAGES = 100;          // max messages kept per room
+        const MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
@@ -452,6 +496,7 @@
         let myRoom = "";
         let messagesRef, presenceRef;
 
+        // ── START CHAT ──
         window.startChat = function () {
             myName = document.getElementById("nameInput").value.trim();
             myRoom = document.getElementById("roomInput").value.trim()
@@ -462,24 +507,35 @@
             messagesRef = ref(db, `rooms/${myRoom}/messages`);
             presenceRef = ref(db, `rooms/${myRoom}/presence/${myName}`);
 
-            // Mark yourself online, auto-remove on disconnect
+            // Mark online, auto-remove on disconnect
             set(presenceRef, { name: myName, online: true });
-            onDisconnect(presenceRef).remove();
 
-            // Count who's online
+            // Count online users
             onValue(ref(db, `rooms/${myRoom}/presence`), snap => {
                 const count = snap.exists() ? Object.keys(snap.val()).length : 0;
-                document.getElementById("onlineCount").textContent =
-                    count + (count === 1 ? " online" : " online");
+                document.getElementById("onlineCount").textContent = count + " online";
             });
 
-            // Listen for messages
-            onChildAdded(messagesRef, snap => {
+            // Clean up old messages when joining
+            cleanupMessages();
+
+            // Listen for new messages (only last 100)
+            const recentQuery = query(messagesRef, orderByChild("time"), limitToFirst(MAX_MESSAGES));
+            onChildAdded(recentQuery, snap => {
                 const m = snap.val();
                 if (m) renderBubble(m.name, m.text, m.name === myName ? "me" : "them", m.time);
             });
 
-            // Show chat screen
+            // Track message count
+            onValue(messagesRef, snap => {
+                const count = snap.exists() ? Object.keys(snap.val()).length : 0;
+                document.getElementById("msgCount").textContent = count;
+
+                // Auto-purge if over limit
+                if (count > MAX_MESSAGES) purgeOldest(count - MAX_MESSAGES);
+            });
+
+            // Show chat
             document.getElementById("setupScreen").style.display = "none";
             document.getElementById("chatScreen").style.display = "flex";
             document.getElementById("roomTag").textContent = "#" + myRoom;
@@ -487,25 +543,77 @@
             addSystem(`you joined #${myRoom} as ${myName}`);
         };
 
+        // ── SEND MESSAGE ──
         window.sendMsg = function () {
             const input = document.getElementById("msgInput");
             const text = input.value.trim();
-            if (!text) return;
+            if (!text || !messagesRef) return;
 
             push(messagesRef, {
                 name: myName,
                 text: text,
-                time: Date.now()
+                time: Date.now()   // timestamp for age-based cleanup
             });
 
             input.value = "";
         };
 
+        // ── CLEAR CHAT (manual) ──
+        window.clearChat = function () {
+            if (!messagesRef) return;
+            if (!confirm("Clear all messages in this room? This cannot be undone.")) return;
+            remove(messagesRef);
+            document.getElementById("messages").innerHTML = "";
+            addSystem("chat cleared");
+        };
+
+        // ── LEAVE ──
         window.leaveChat = function () {
             if (presenceRef) set(presenceRef, null);
             location.reload();
         };
 
+        // ── AUTO-DELETE messages older than 24 hours ──
+        async function cleanupMessages() {
+            if (!messagesRef) return;
+            try {
+                const snap = await get(messagesRef);
+                if (!snap.exists()) return;
+
+                const now = Date.now();
+                const cutoff = now - MAX_AGE_MS;
+                let deleted = 0;
+
+                snap.forEach(child => {
+                    const msg = child.val();
+                    if (msg.time && msg.time < cutoff) {
+                        remove(child.ref);
+                        deleted++;
+                    }
+                });
+
+                if (deleted > 0) {
+                    console.log(`[SIGNAL] Cleaned up ${deleted} old messages`);
+                    addSystem(`${deleted} old message${deleted > 1 ? "s" : ""} auto-deleted (24h limit)`);
+                }
+            } catch (e) {
+                console.warn("Cleanup error:", e);
+            }
+        }
+
+        // ── PURGE OLDEST messages when over 100 limit ──
+        async function purgeOldest(count) {
+            if (!messagesRef || count <= 0) return;
+            try {
+                const snap = await get(query(messagesRef, orderByChild("time"), limitToFirst(count)));
+                snap.forEach(child => remove(child.ref));
+                console.log(`[SIGNAL] Purged ${count} messages (over 100 limit)`);
+            } catch (e) {
+                console.warn("Purge error:", e);
+            }
+        }
+
+        // ── RENDER ──
         function renderBubble(name, text, type, timestamp) {
             const box = document.getElementById("messages");
             const wrap = document.createElement("div");
@@ -533,10 +641,10 @@
             const box = document.getElementById("messages");
             const wrap = document.createElement("div");
             wrap.className = "msg-wrap system";
-            const bubble = document.createElement("div");
-            bubble.className = "bubble";
-            bubble.textContent = "— " + text + " —";
-            wrap.appendChild(bubble);
+            const b = document.createElement("div");
+            b.className = "bubble";
+            b.textContent = "— " + text + " —";
+            wrap.appendChild(b);
             box.appendChild(wrap);
             box.scrollTop = box.scrollHeight;
         }
