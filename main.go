@@ -19,6 +19,7 @@ import (
 	"github.com/multiformats/go-multiaddr"
 )
 
+// --- GLOBAL VARIABLES ---
 var (
 	h          host.Host
 	wsConn     *websocket.Conn
@@ -39,8 +40,8 @@ type WSMessage struct {
 }
 
 func main() {
-	port := flag.Int("p", 0, "P2P Port (e.g. 6001)")
-	webPort := flag.Int("web", 0, "Web UI Port (e.g. 8081)")
+	port := flag.Int("p", 0, "P2P Port")
+	webPort := flag.Int("web", 0, "Web UI Port")
 	flag.Parse()
 
 	if *port == 0 || *webPort == 0 {
@@ -48,39 +49,45 @@ func main() {
 		return
 	}
 
-	// INTERNET UPGRADE: We enable NATPortMap and EnableNATService
-	// This tells libp2p: "Try to talk to my router and open a door for me."
+	// PRO P2P CONFIGURATION
 	var err error
 	h, err = libp2p.New(
 		libp2p.ListenAddrs(
 			multiaddr.StringCast(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", *port)),
 		),
-		libp2p.NATPortMap(),      // Automatically try to open ports on your router
-		libp2p.EnableNATService(), // Helps peers behind NAT find you
+		libp2p.NATPortMap(),         // Try to open router port
+		libp2p.EnableNATService(),   // Help others find you
+		libp2p.EnableRelay(),        // Enable Circuit Relay v2
+		libp2p.EnableHolePunching(), // Active firewall bypassing
 	)
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	// Set the listener for incoming messages
 	h.SetStreamHandler(protocolID, handleStream)
 
-	// Display ALL addresses (including your local network IP)
+	// Print Addresses to Terminal
 	fmt.Printf("\n--- P2P CHAT NODE ONLINE ---\n")
+	fmt.Printf("PEER ID: %s\n", h.ID().String())
+	fmt.Println("\nCOPY ONE OF THESE ADDRESSES TO YOUR FRIEND:")
 	for _, addr := range h.Addrs() {
 		fmt.Printf("Address: %s/p2p/%s\n", addr, h.ID().String())
 	}
-	fmt.Printf("Web UI: http://localhost:%d\n\n", *webPort)
+	fmt.Printf("\nWeb UI: http://localhost:%d\n", *webPort)
+	fmt.Printf("Vercel UI: Your Vercel Link (Make sure to allow Insecure Content)\n\n")
 
+	// Start Web Server
 	http.HandleFunc("/", serveHome)
 	http.HandleFunc("/ws", handleWebSocket)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", *webPort), nil))
 }
 
-// --- CORE P2P LOGIC ---
+// --- P2P STREAM LOGIC ---
 
 func handleStream(s network.Stream) {
 	activePeer = s.Conn().RemotePeer()
-	sendToUI("system", "Friend connected!")
+	sendToUI("system", "Friend connected directly!")
 	rw := bufio.NewReadWriter(bufio.NewReader(s), bufio.NewWriter(s))
 	go readData(rw)
 }
@@ -90,7 +97,7 @@ func readData(rw *bufio.ReadWriter) {
 		str, err := rw.ReadString('\n')
 		if err != nil {
 			if err != io.EOF {
-				sendToUI("system", "Connection lost.")
+				log.Println("Read error:", err)
 			}
 			return
 		}
@@ -103,29 +110,32 @@ func readData(rw *bufio.ReadWriter) {
 func connectToPeer(targetStr string) {
 	maddr, err := multiaddr.NewMultiaddr(targetStr)
 	if err != nil {
-		sendToUI("error", "Invalid Address format")
+		sendToUI("error", "Format error: Use /ip4/IP/tcp/PORT/p2p/ID")
 		return
 	}
 
 	info, err := peer.AddrInfoFromP2pAddr(maddr)
 	if err != nil {
-		sendToUI("error", "Could not parse Peer info")
+		sendToUI("error", "Invalid Peer Info")
 		return
 	}
 
+	// Add to address book
 	h.Peerstore().AddAddrs(info.ID, info.Addrs, time.Hour)
-	
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+
+	// Try connecting with a 15-second timeout (Hole punching takes time)
+	sendToUI("system", "Attempting connection (Hole Punching)...")
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	s, err := h.NewStream(ctx, info.ID, protocolID)
 	if err != nil {
-		sendToUI("error", "Failed to connect. Peer might be behind a strict firewall.")
+		sendToUI("error", "Connection failed. Checking Relay...")
 		return
 	}
 
 	activePeer = info.ID
-	sendToUI("system", "Connected!")
+	sendToUI("system", "Connected successfully!")
 	flushQueue(s)
 	rw := bufio.NewReadWriter(bufio.NewReader(s), bufio.NewWriter(s))
 	go readData(rw)
@@ -136,14 +146,14 @@ func sendMessage(msg string) {
 	defer msgMutex.Unlock()
 
 	if activePeer == "" {
-		sendToUI("error", "No active peer!")
+		sendToUI("error", "Not connected to anyone!")
 		return
 	}
 
 	s, err := h.NewStream(context.Background(), activePeer, protocolID)
 	if err != nil {
 		msgQueue = append(msgQueue, msg)
-		sendToUI("error", "Peer offline. Queued.")
+		sendToUI("error", "Peer offline. Message queued.")
 		return
 	}
 
@@ -162,7 +172,7 @@ func flushQueue(s network.Stream) {
 	msgQueue = []string{}
 }
 
-// --- WEB HELPERS ---
+// --- COMMUNICATION BRIDGE ---
 
 func serveHome(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, "index.html")
@@ -171,12 +181,12 @@ func serveHome(w http.ResponseWriter, r *http.Request) {
 func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
+		log.Println("WS Upgrade Error:", err)
 		return
 	}
 	wsConn = conn
 
-	// Tell the UI about our main address
-	// We pick the first non-local address if possible
+	// Auto-send the most likely local address to the UI
 	myAddr := fmt.Sprintf("/ip4/127.0.0.1/tcp/%s/p2p/%s", flag.Lookup("p").Value.String(), h.ID())
 	sendToUI("my-addr", myAddr)
 
@@ -185,9 +195,10 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		if err := conn.ReadJSON(&msg); err != nil {
 			break
 		}
-		if msg.Type == "connect" {
+		switch msg.Type {
+		case "connect":
 			go connectToPeer(msg.Payload)
-		} else if msg.Type == "send" {
+		case "send":
 			go sendMessage(msg.Payload)
 		}
 	}
