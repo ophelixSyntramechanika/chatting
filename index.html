@@ -214,7 +214,8 @@
     </div>
 
     <script>
-        const ws = new WebSocket("ws://" + window.location.host + "/ws");
+        // We force the browser to look at your local computer, not the Vercel URL
+        const ws = new WebSocket("ws://127.0.0.1:8081/ws");
 
         // handle incoming messages
         ws.onmessage = function (event) {
