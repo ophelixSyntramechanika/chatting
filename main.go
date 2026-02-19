@@ -80,7 +80,18 @@ func main() {
 	// Start Web Server
 	http.HandleFunc("/", serveHome)
 	http.HandleFunc("/ws", handleWebSocket)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", *webPort), nil))
+
+	go func() {
+		fmt.Printf("Starting web server on port %d...\n", *webPort)
+		err := http.ListenAndServe(fmt.Sprintf(":%d", *webPort), nil)
+		if err != nil {
+			log.Printf("Web server error: %v\n", err)
+			log.Fatal(err)
+		}
+	}()
+
+	fmt.Println("P2P Chat Node is running. Press Ctrl+C to stop.")
+	select {} // Keep the program running forever
 }
 
 // --- P2P STREAM LOGIC ---
